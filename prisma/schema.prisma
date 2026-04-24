@@ -1,0 +1,81 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlserver"
+}
+
+model User {
+  id           String     @id @default(uuid()) @db.UniqueIdentifier
+  loginId      String     @unique @db.NVarChar(100)
+  passwordHash String     @db.NVarChar(255)
+  name         String     @db.NVarChar(100)
+  role         String     @default("user") @db.NVarChar(20)
+  createdAt    DateTime   @default(now())
+  responses    Response[]
+  surveys      Survey[]   @relation("SurveyCreator")
+}
+
+model Survey {
+  id          String     @id @default(uuid()) @db.UniqueIdentifier
+  title       String     @db.NVarChar(200)
+  description String?    @db.NVarChar(1000)
+  createdBy   String     @db.UniqueIdentifier
+  creator     User       @relation("SurveyCreator", fields: [createdBy], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdAt   DateTime   @default(now())
+  questions   Question[]
+  responses   Response[]
+}
+
+model Question {
+  id       String   @id @default(uuid()) @db.UniqueIdentifier
+  surveyId String   @db.UniqueIdentifier
+  survey   Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  order    Int
+  type     String   @db.NVarChar(20)
+  text     String   @db.NVarChar(500)
+  choices  Choice[]
+  answers  Answer[]
+
+  @@index([surveyId])
+}
+
+model Choice {
+  id         String   @id @default(uuid()) @db.UniqueIdentifier
+  questionId String   @db.UniqueIdentifier
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  order      Int
+  text       String   @db.NVarChar(500)
+  answers    Answer[]
+
+  @@index([questionId])
+}
+
+model Response {
+  id          String   @id @default(uuid()) @db.UniqueIdentifier
+  surveyId    String   @db.UniqueIdentifier
+  survey      Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  userId      String   @db.UniqueIdentifier
+  user        User     @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  submittedAt DateTime @default(now())
+  answers     Answer[]
+
+  @@unique([surveyId, userId])
+  @@index([surveyId])
+}
+
+model Answer {
+  id         String    @id @default(uuid()) @db.UniqueIdentifier
+  responseId String    @db.UniqueIdentifier
+  response   Response  @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  questionId String    @db.UniqueIdentifier
+  question   Question  @relation(fields: [questionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  choiceId   String?   @db.UniqueIdentifier
+  choice     Choice?   @relation(fields: [choiceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  text       String?   @db.NVarChar(2000)
+  date       DateTime?
+
+  @@index([responseId])
+  @@index([questionId])
+}
