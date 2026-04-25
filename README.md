@@ -87,6 +87,15 @@ npm run dev
 
 http://localhost:3000 で起動します。
 
+### 6. テスト
+
+```bash
+npm run test          # 1 回実行
+npm run test:watch    # 監視モード
+```
+
+テストの方針と CI 構成は [docs/testing.md](docs/testing.md) を参照。
+
 ## CSV フォーマット
 
 ### ユーザー一括登録

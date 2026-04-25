@@ -70,6 +70,8 @@ docs/design.md              設計書（Confluence にもミラー）
 | `npm run db:push` | スキーマを DB に直接反映（マイグレーション無し） |
 | `npm run db:seed` | 初期管理者を upsert |
 | `npm run db:generate` | Prisma クライアント再生成（`postinstall` でも自動実行） |
+| `npm run test` | vitest で単体テスト実行 |
+| `npm run test:watch` | vitest 監視モード |
 
 スキーマ（`prisma/schema.prisma`）変更後は **必ず `npm run db:migrate` を実行**。型生成も同時に走る。
 
@@ -98,6 +100,9 @@ docs/design.md              設計書（Confluence にもミラー）
 - **`select` で必要列だけ取得**。`passwordHash` などの機密はクライアントに渡さない
 - **複数 Server Action の状態型はユニオン型**（`{ ok: true; ... } | { ok: false; message }`）
 - **コメントは原則最小限**（学習用に詳細コメントを入れている既存コードはそのまま残す）
+- **zod スキーマは `src/lib/schemas.ts` に集約**。Server Action 直書きを避け、単体テスト可能にする
+- **環境変数は `src/lib/env.ts` 経由**で参照する（`process.env.X` 直参照禁止）。新規変数は `EnvSchema` に追加
+- **変更前後で `npm run test` を必ず実行**（不変条件のリグレッション検出）
 
 ## デプロイ
 

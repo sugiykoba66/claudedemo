@@ -29,6 +29,15 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Test
+        run: npm run test
+
       - name: Build Next.js (standalone)
         run: npm run build
 
@@ -48,6 +57,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: build
+    # GitHub Settings の Environments で 'production' に required reviewers を設定すると
+    # この job が approval 待ちで停止し、承認者がポチるまで実際のデプロイは走らない。
+    # 設定手順は docs/testing.md を参照。
+    environment: production
 
     steps:
       - name: Download artifact
