@@ -10,6 +10,8 @@ import { cookies } from 'next/headers';
 import { getIronSession, type SessionOptions } from 'iron-session';
 // サーバー側でのリダイレクト用 API。実行するとそこから先のコードは走らない
 import { redirect } from 'next/navigation';
+// 起動時に検証済みの環境変数（未設定や 32 文字未満の SESSION_SECRET なら起動しない）
+import { env } from './env';
 
 // セッション Cookie に格納するデータの型
 // すべて optional（?）にしているのは、ログイン前は空のセッションが返るため
@@ -21,20 +23,16 @@ export type SessionData = {
   role?: 'admin' | 'user';
 };
 
-// 開発環境用のフォールバック Secret。本番では SESSION_SECRET 環境変数を必ず設定すること
-const FALLBACK_SECRET = 'development-only-secret-please-change-to-32chars-or-more!';
-
 // iron-session の設定。
 // export して proxy.ts などからも参照できるようにする
 export const sessionOptions: SessionOptions = {
-  // ?? は「nullish coalescing 演算子」: 左辺が null/undefined のとき右辺を使う
-  password: process.env.SESSION_SECRET ?? FALLBACK_SECRET,
+  password: env.SESSION_SECRET,
   cookieName: 'survey_session',
   cookieOptions: {
     // JS から Cookie にアクセスできなくする（XSS 対策）
     httpOnly: true,
     // 本番環境のみ HTTPS でしか送らない
-    secure: process.env.NODE_ENV === 'production',
+    secure: env.NODE_ENV === 'production',
     // 別サイトからの遷移時はクロスサイト Cookie を送らない（CSRF 軽減）
     sameSite: 'lax',
     path: '/',

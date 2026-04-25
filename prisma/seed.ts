@@ -7,7 +7,8 @@ import bcrypt from 'bcrypt';
 // dotenv/config: .env を自動で読み込んで process.env に展開する
 import 'dotenv/config';
 
-// seed は単発スクリプトなので Proxy 経由ではなく直接 PrismaClient を生成
+// seed は tsx で単発実行されるスクリプト。Next.js のサーバーコンテキスト外なので
+// src/lib/env.ts は使わず、必要な環境変数だけここで個別検証する。
 const url = process.env.DATABASE_URL;
 if (!url) {
   throw new Error('DATABASE_URL が設定されていません');
@@ -18,10 +19,18 @@ const prisma = new PrismaClient({ adapter });
 
 // メイン処理（即時実行はせず、最後に呼び出す）
 async function main() {
-  // 環境変数で上書き可能。未設定なら既定値を使用
+  // 環境変数で上書き可能。loginId と name は未設定なら既定値を使用
   const loginId = process.env.ADMIN_LOGIN_ID ?? 'admin';
-  const password = process.env.ADMIN_PASSWORD ?? 'changeme';
   const name = process.env.ADMIN_NAME ?? '管理者';
+
+  // ADMIN_PASSWORD は明示的に必須化。'changeme' 等のデフォルトを通すと
+  // 本番で初期パスワードのまま運用される事故につながるため。
+  const password = process.env.ADMIN_PASSWORD;
+  if (!password || password.length === 0) {
+    throw new Error(
+      'ADMIN_PASSWORD が設定されていません。.env または App Service の環境変数で必ず指定してください。',
+    );
+  }
 
   const passwordHash = await bcrypt.hash(password, 10);
 
