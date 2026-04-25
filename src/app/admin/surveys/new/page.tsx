@@ -1,3 +1,6 @@
+// 新規アンケート作成ページ（/admin/surveys/new）。
+// 実体のフォームはクライアントコンポーネント SurveyBuilder。
+
 import { SurveyBuilder } from './survey-builder';
 
 export default function NewSurveyPage() {

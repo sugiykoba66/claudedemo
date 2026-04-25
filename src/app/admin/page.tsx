@@ -1,11 +1,16 @@
+// 管理者トップ（/admin）: アンケート一覧と「新規作成」ボタンを表示する。
+
 import Link from 'next/link';
 import { prisma } from '@/lib/db';
 
 export default async function AdminDashboard() {
+  // Prisma の findMany は配列を返す。include で関連データも一緒に取得。
+  // _count.select で「件数だけ」効率よく取れる（実際の Question/Response 行は取らない）
   const surveys = await prisma.survey.findMany({
     orderBy: { createdAt: 'desc' },
     include: {
       _count: { select: { responses: true, questions: true } },
+      // 作成者の名前だけ取得（select で必要な列のみに絞る）
       creator: { select: { name: true } },
     },
   });
@@ -23,6 +28,7 @@ export default async function AdminDashboard() {
       </div>
 
       <div className="bg-white rounded-lg shadow">
+        {/* 三項演算子で「0 件のとき」と「ある場合のテーブル」を出し分け */}
         {surveys.length === 0 ? (
           <p className="p-6 text-sm text-zinc-800">アンケートがまだ登録されていません。</p>
         ) : (
@@ -38,9 +44,11 @@ export default async function AdminDashboard() {
               </tr>
             </thead>
             <tbody>
+              {/* 配列の map でリスト要素を生成。key には一意な ID を渡す（React の差分更新最適化用） */}
               {surveys.map((s) => (
                 <tr key={s.id} className="border-b border-zinc-100">
                   <td className="py-2 px-4">
+                    {/* テンプレートリテラル ` ` 内で ${} を使うと変数を埋め込める */}
                     <Link
                       href={`/admin/surveys/${s.id}`}
                       className="text-blue-600 hover:underline"
@@ -51,6 +59,7 @@ export default async function AdminDashboard() {
                   <td className="py-2 px-4">{s.creator.name}</td>
                   <td className="py-2 px-4">{s._count.questions}</td>
                   <td className="py-2 px-4">{s._count.responses}</td>
+                  {/* Date を YYYY-MM-DD に整形（ISO 文字列の先頭10文字を切り出し） */}
                   <td className="py-2 px-4">{s.createdAt.toISOString().slice(0, 10)}</td>
                   <td className="py-2 px-4 text-right">
                     <Link

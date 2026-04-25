@@ -1,33 +1,47 @@
+// アンケート作成 UI のクライアントコンポーネント。
+// タイトル/説明/質問/選択肢をクライアント側のステートで管理し、
+// 送信時に JSON 文字列にまとめて Server Action へ渡す。
+
 'use client';
 
+// useState: コンポーネントのローカルステートを保持する基本フック
 import { useActionState, useState } from 'react';
 import { createSurvey, type CreateSurveyState } from '../actions';
 
+// 質問タイプを4つに限定したリテラルユニオン型
 type QuestionType = 'single' | 'multi' | 'text' | 'date';
 
+// 編集中の1質問の構造
 type DraftQuestion = {
   type: QuestionType;
   text: string;
   choices: string[];
 };
 
+// 新しい質問の初期値を返すヘルパ。デフォルトは選択肢2つの単一選択
 function emptyQuestion(): DraftQuestion {
   return { type: 'single', text: '', choices: ['', ''] };
 }
 
 export function SurveyBuilder() {
+  // 個別のフォーム値を独立したステートで保持
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  // ジェネリクス <DraftQuestion[]> で配列要素の型を明示
   const [questions, setQuestions] = useState<DraftQuestion[]>([emptyQuestion()]);
   const [state, action, pending] = useActionState<CreateSurveyState, FormData>(
     createSurvey,
     undefined,
   );
 
+  // 質問1件の任意プロパティを更新する。Partial<T> = T のすべてのキーを optional にした型
   function updateQuestion(index: number, next: Partial<DraftQuestion>) {
+    // 関数形式の setState: 直前の state を引数で受け取り、新しい state を返す
+    // スプレッド構文 ...q で既存プロパティを展開し、next で上書き
     setQuestions((prev) => prev.map((q, i) => (i === index ? { ...q, ...next } : q)));
   }
 
+  // 質問内の特定の選択肢を更新
   function updateChoice(qIndex: number, cIndex: number, value: string) {
     setQuestions((prev) =>
       prev.map((q, i) =>
@@ -36,12 +50,14 @@ export function SurveyBuilder() {
     );
   }
 
+  // 選択肢を末尾に追加
   function addChoice(qIndex: number) {
     setQuestions((prev) =>
       prev.map((q, i) => (i === qIndex ? { ...q, choices: [...q.choices, ''] } : q)),
     );
   }
 
+  // 指定インデックスの選択肢を削除（filter で残す要素のみ抽出）
   function removeChoice(qIndex: number, cIndex: number) {
     setQuestions((prev) =>
       prev.map((q, i) =>
@@ -58,16 +74,21 @@ export function SurveyBuilder() {
     setQuestions((prev) => prev.filter((_, i) => i !== index));
   }
 
+  // 質問の並び替え。dir = -1（上へ） or 1（下へ）
   function moveQuestion(index: number, dir: -1 | 1) {
     setQuestions((prev) => {
       const next = [...prev];
       const target = index + dir;
+      // 端を超えるなら何もしない
       if (target < 0 || target >= next.length) return prev;
+      // 分割代入によるスワップ: [a, b] = [b, a]
       [next[index], next[target]] = [next[target], next[index]];
       return next;
     });
   }
 
+  // フォーム送信時に Server Action へ渡す JSON ペイロードを毎レンダー組み立て
+  // 単一/複数選択以外は choices を undefined にして送信データから除外
   const payload = JSON.stringify({
     title: title.trim(),
     description: description.trim(),
@@ -83,14 +104,17 @@ export function SurveyBuilder() {
 
   return (
     <form action={action} className="space-y-6">
+      {/* JSON を hidden input に入れてフォーム送信する。Server Action 側で JSON.parse する */}
       <input type="hidden" name="payload" value={payload} />
 
+      {/* タイトル・説明セクション */}
       <div className="bg-white rounded-lg shadow p-6 space-y-4">
         <div>
           <label className="block text-sm font-medium mb-1">タイトル</label>
           <input
             type="text"
             value={title}
+            // 入力イベント (e) の e.target.value で現在の値を取得
             onChange={(e) => setTitle(e.target.value)}
             required
             maxLength={200}
@@ -109,6 +133,7 @@ export function SurveyBuilder() {
         </div>
       </div>
 
+      {/* 質問カードを質問数だけ繰り返し描画 */}
       {questions.map((q, qi) => (
         <div key={qi} className="bg-white rounded-lg shadow p-6 space-y-4">
           <div className="flex items-center justify-between">
@@ -128,6 +153,7 @@ export function SurveyBuilder() {
               >
                 下へ
               </button>
+              {/* 質問が2問以上ある場合のみ削除ボタン表示 */}
               {questions.length > 1 && (
                 <button
                   type="button"
@@ -156,6 +182,7 @@ export function SurveyBuilder() {
             <label className="block text-sm font-medium mb-1">回答タイプ</label>
             <select
               value={q.type}
+              // select の値は string なので、型アサーション (as QuestionType) でユニオン型に絞り込む
               onChange={(e) => updateQuestion(qi, { type: e.target.value as QuestionType })}
               className="border border-zinc-300 rounded px-3 py-2 text-sm"
             >
@@ -166,6 +193,7 @@ export function SurveyBuilder() {
             </select>
           </div>
 
+          {/* 選択肢入力エリアは選択型のときだけ表示 */}
           {(q.type === 'single' || q.type === 'multi') && (
             <div className="space-y-2">
               <label className="block text-sm font-medium">選択肢</label>
@@ -201,6 +229,7 @@ export function SurveyBuilder() {
         </div>
       ))}
 
+      {/* フッタ: 質問追加 / 保存 */}
       <div className="flex items-center justify-between">
         <button
           type="button"
@@ -218,6 +247,7 @@ export function SurveyBuilder() {
         </button>
       </div>
 
+      {/* サーバー側エラー */}
       {state && !state.ok && <p className="text-red-600 text-sm">{state.message}</p>}
     </form>
   );

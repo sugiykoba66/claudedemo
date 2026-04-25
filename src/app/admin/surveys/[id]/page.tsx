@@ -1,7 +1,13 @@
+// アンケート詳細ページ（/admin/surveys/[id]）。
+// ファイル名の [id] は動的セグメント。URL の該当部分が params.id に入る。
+
+// notFound: 404 ページを返す Next.js 提供のヘルパ
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/db';
 import { DeleteSurveyButton } from './delete-button';
 
+// Record<K,V> = キーが K 型・値が V 型のオブジェクトを表す。
+// 質問タイプ → 表示用ラベルの対応表
 const typeLabel: Record<string, string> = {
   single: '単一選択',
   multi: '複数選択',
@@ -9,12 +15,14 @@ const typeLabel: Record<string, string> = {
   date: '日付',
 };
 
+// Next.js 16 では params が Promise になっている点に注意（要 await）
 export default async function SurveyDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  // include で関連データもまとめて取得。質問・選択肢は order 昇順でソート
   const survey = await prisma.survey.findUnique({
     where: { id },
     include: {
@@ -27,6 +35,7 @@ export default async function SurveyDetailPage({
     },
   });
 
+  // 該当 ID が存在しなければ 404
   if (!survey) notFound();
 
   return (
@@ -35,6 +44,7 @@ export default async function SurveyDetailPage({
         <div>
           <h1 className="text-2xl font-semibold">{survey.title}</h1>
           {survey.description && (
+            // whitespace-pre-wrap で改行をそのまま表示
             <p className="text-sm text-zinc-800 mt-1 whitespace-pre-wrap">{survey.description}</p>
           )}
           <p className="text-xs text-zinc-800 mt-2">
@@ -43,12 +53,14 @@ export default async function SurveyDetailPage({
           </p>
         </div>
         <div className="flex gap-2">
+          {/* CSV ダウンロード（route handler が CSV を返す）。Next.js のクライアント遷移を避けるため <a> を使用 */}
           <a
             href={`/admin/surveys/${survey.id}/download`}
             className="bg-green-600 text-white rounded px-4 py-2 text-sm font-medium hover:bg-green-700"
           >
             CSVダウンロード
           </a>
+          {/* 削除は確認ダイアログが必要なのでクライアントコンポーネント */}
           <DeleteSurveyButton surveyId={survey.id} title={survey.title} />
         </div>
       </div>
@@ -58,6 +70,7 @@ export default async function SurveyDetailPage({
         {survey.questions.map((q, qi) => (
           <div key={q.id} className="border-l-4 border-blue-500 pl-4">
             <p className="text-xs text-zinc-800">
+              {/* typeLabel に未知のタイプがあった場合は q.type をそのまま表示 */}
               質問 {qi + 1}・{typeLabel[q.type] ?? q.type}
             </p>
             <p className="text-sm font-medium">{q.text}</p>

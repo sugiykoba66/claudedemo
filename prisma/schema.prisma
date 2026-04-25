@@ -1,46 +1,73 @@
+// Prisma スキーマ定義ファイル
+// このファイルから DB のテーブル構造（モデル）と TypeScript 型を生成する。
+// 変更したら `npx prisma migrate dev` でマイグレーションを実行し、
+// 型を再生成（`npx prisma generate`）すること。
+
+// クライアント生成設定: アプリから DB を扱うための JS/TS クライアントを生成する
 generator client {
   provider = "prisma-client-js"
 }
 
+// データソース設定: 接続先の DB エンジンを指定（接続文字列は環境変数 DATABASE_URL から）
 datasource db {
   provider = "sqlserver"
 }
 
+// ユーザー（管理者・回答者の両方）
 model User {
+  // 主キー: UUID を自動生成して @db.UniqueIdentifier (SQL Server の UUID 型) として保存
   id           String     @id @default(uuid()) @db.UniqueIdentifier
+  // ログインID: 一意制約（@unique）。NVarChar は Unicode 対応の可変長文字列
   loginId      String     @unique @db.NVarChar(100)
+  // パスワードのハッシュ値（bcrypt）。平文は保存しない
   passwordHash String     @db.NVarChar(255)
   name         String     @db.NVarChar(100)
+  // 権限: "admin" または "user"。既定は "user"
   role         String     @default("user") @db.NVarChar(20)
+  // 登録日時。作成時に現在時刻を自動セット
   createdAt    DateTime   @default(now())
+  // 1:N リレーション。ユーザーが行った回答の一覧
   responses    Response[]
+  // 1:N リレーション。ユーザーが作成したアンケート（@relation でリレーション名を明示）
   surveys      Survey[]   @relation("SurveyCreator")
 }
 
+// アンケート本体
 model Survey {
   id          String     @id @default(uuid()) @db.UniqueIdentifier
   title       String     @db.NVarChar(200)
+  // ? は NULL 許容を意味する（任意項目）
   description String?    @db.NVarChar(1000)
+  // 作成者の User.id を保持する外部キー
   createdBy   String     @db.UniqueIdentifier
+  // 作成者ユーザーへのリレーション。SQL Server の循環参照警告を避けるため、
+  // 削除/更新時のカスケード動作は NoAction を指定
   creator     User       @relation("SurveyCreator", fields: [createdBy], references: [id], onDelete: NoAction, onUpdate: NoAction)
   createdAt   DateTime   @default(now())
   questions   Question[]
   responses   Response[]
 }
 
+// アンケートの中の個別の質問
 model Question {
   id       String   @id @default(uuid()) @db.UniqueIdentifier
   surveyId String   @db.UniqueIdentifier
+  // 親アンケート。Survey 削除時にこの質問もまとめて削除（Cascade）
   survey   Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  // 表示順
   order    Int
+  // 質問タイプ: "single" / "multi" / "text" / "date"
   type     String   @db.NVarChar(20)
+  // 質問文
   text     String   @db.NVarChar(500)
   choices  Choice[]
   answers  Answer[]
 
+  // 検索高速化のためのインデックス（Survey から質問を引くときに効く）
   @@index([surveyId])
 }
 
+// 単一/複数選択の選択肢
 model Choice {
   id         String   @id @default(uuid()) @db.UniqueIdentifier
   questionId String   @db.UniqueIdentifier
@@ -52,28 +79,36 @@ model Choice {
   @@index([questionId])
 }
 
+// ユーザー1人がアンケート1件に対して送った「回答全体」（1 回の送信で 1 レコード）
 model Response {
   id          String   @id @default(uuid()) @db.UniqueIdentifier
   surveyId    String   @db.UniqueIdentifier
   survey      Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
   userId      String   @db.UniqueIdentifier
+  // ユーザー削除でアンケート結果が消えないよう NoAction
   user        User     @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   submittedAt DateTime @default(now())
   answers     Answer[]
 
+  // 同じユーザーが同じアンケートに重複回答できないよう複合一意制約
   @@unique([surveyId, userId])
   @@index([surveyId])
 }
 
+// 質問1件に対する個別の回答（選択肢 / 自由記述 / 日付 のいずれか）
 model Answer {
   id         String    @id @default(uuid()) @db.UniqueIdentifier
   responseId String    @db.UniqueIdentifier
+  // 親 Response が消えたら一緒に削除
   response   Response  @relation(fields: [responseId], references: [id], onDelete: Cascade)
   questionId String    @db.UniqueIdentifier
   question   Question  @relation(fields: [questionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  // 選択肢を選ぶ質問のとき使用（自由記述・日付のときは null）
   choiceId   String?   @db.UniqueIdentifier
   choice     Choice?   @relation(fields: [choiceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  // 自由記述の質問のとき使用
   text       String?   @db.NVarChar(2000)
+  // 日付の質問のとき使用
   date       DateTime?
 
   @@index([responseId])
