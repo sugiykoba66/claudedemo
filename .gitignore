@@ -43,3 +43,7 @@ next-env.d.ts
 
 # Claude Code local config
 .claude/
+
+# Azure publish profile (never commit; load into GitHub Secrets instead)
+.github_publishprofile.xml*
+*.PublishSettings
