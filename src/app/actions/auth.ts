@@ -10,12 +10,8 @@ import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { getSession } from '@/lib/session';
-
-// ログインフォームの入力検証スキーマ
-const LoginSchema = z.object({
-  loginId: z.string().trim().min(1, { message: 'ユーザーIDを入力してください' }),
-  password: z.string().min(1, { message: 'パスワードを入力してください' }),
-});
+// スキーマは src/lib/schemas.ts に集約（テスト容易化のため Server Action から分離）
+import { LoginSchema } from '@/lib/schemas';
 
 // useActionState (クライアント側) と Server Action 間で受け渡しする「状態」の型。
 // ユニオン型: 「エラー情報を持つオブジェクト」または「undefined（初期状態）」のどちらか
