@@ -4,26 +4,10 @@
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { requireAdmin } from '@/lib/session';
-
-// 質問1件分の入力検証スキーマ
-const QuestionInputSchema = z.object({
-  // ユニオン型: この4種類のどれか以外は弾く
-  type: z.enum(['single', 'multi', 'text', 'date']),
-  text: z.string().trim().min(1).max(500),
-  // 単一/複数選択のときだけ choices が必要なので optional にしておき、後段で個別チェック
-  choices: z.array(z.string().trim().min(1).max(500)).optional(),
-});
-
-// アンケート全体の入力検証スキーマ
-const SurveyInputSchema = z.object({
-  title: z.string().trim().min(1).max(200),
-  description: z.string().trim().max(1000).optional(),
-  // 質問は最低1問必要
-  questions: z.array(QuestionInputSchema).min(1),
-});
+// スキーマは src/lib/schemas.ts に集約（テスト容易化のため Server Action から分離）
+import { SurveyInputSchema } from '@/lib/schemas';
 
 // Server Action から返す状態の型
 export type CreateSurveyState =

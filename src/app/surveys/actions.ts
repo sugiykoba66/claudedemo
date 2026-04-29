@@ -4,24 +4,10 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { requireUser } from '@/lib/session';
-
-// 1質問分の回答入力スキーマ。質問タイプによって使うフィールドが変わるため optional だらけ
-const AnswerInputSchema = z.object({
-  // UUID 形式かどうかを zod が検証
-  questionId: z.string().uuid(),
-  choiceIds: z.array(z.string().uuid()).optional(),
-  text: z.string().trim().max(2000).optional(),
-  date: z.string().optional(),
-});
-
-// 送信全体のスキーマ
-const SubmitSchema = z.object({
-  surveyId: z.string().uuid(),
-  answers: z.array(AnswerInputSchema),
-});
+// スキーマは src/lib/schemas.ts に集約（テスト容易化のため Server Action から分離）
+import { SubmitSchema } from '@/lib/schemas';
 
 // 失敗時のみ状態を持ち、成功時は redirect で離脱するため undefined になる
 export type SubmitState =

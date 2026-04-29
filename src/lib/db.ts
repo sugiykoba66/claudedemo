@@ -7,6 +7,8 @@ import 'server-only';
 import { PrismaClient } from '@prisma/client';
 // Azure SQL Server 用のドライバアダプタ（@prisma/adapter-mssql）
 import { PrismaMssql } from '@prisma/adapter-mssql';
+// 起動時検証済みの環境変数
+import { env } from './env';
 
 // グローバルスコープに __prisma という変数を生やすための型宣言
 // var を使うのは globalThis に値をぶら下げるための慣習（let/const では駄目）
@@ -16,12 +18,8 @@ declare global {
 
 // Prisma クライアントを実際に生成するファクトリ関数
 function createPrisma(): PrismaClient {
-  const url = process.env.DATABASE_URL;
-  if (!url) {
-    throw new Error('DATABASE_URL が設定されていません');
-  }
-  // 接続文字列から SQL Server 用アダプタを構築
-  const adapter = new PrismaMssql(url);
+  // 接続文字列から SQL Server 用アダプタを構築（env 検証で空文字は弾かれている）
+  const adapter = new PrismaMssql(env.DATABASE_URL);
   return new PrismaClient({ adapter });
 }
 
@@ -30,7 +28,7 @@ function getPrisma(): PrismaClient {
   if (globalThis.__prisma) return globalThis.__prisma;
   const instance = createPrisma();
   // 本番では HMR が走らないのでキャッシュ不要。dev/test のみキャッシュ
-  if (process.env.NODE_ENV !== 'production') {
+  if (env.NODE_ENV !== 'production') {
     globalThis.__prisma = instance;
   }
   return instance;
