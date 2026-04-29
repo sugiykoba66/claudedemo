@@ -124,37 +124,48 @@ admin2,運営管理者,strongPass,admin
 
 ## Azure App Service へのデプロイ
 
+本番環境は **GitHub Actions による自動デプロイ + production 承認ゲート** で運用しています。詳細は [docs/design.md §11](docs/design.md) を参照。
+
 ### 1. Azure リソース準備
 
 - **Azure SQL Database** を作成（Standard S0 以上推奨）
-- **Azure App Service (Linux, Node 20 LTS)** を作成
+- **Azure App Service (Linux, Node 20 LTS)** を作成（`linuxFxVersion=NODE|20-lts`）
 - App Service のファイアウォールから Azure SQL への接続を許可
 
 ### 2. App Service のアプリケーション設定（環境変数）
 
-| Key | Value |
-|---|---|
-| `DATABASE_URL` | Azure SQL の接続文字列（上記形式） |
-| `SESSION_SECRET` | 32文字以上のランダム文字列 |
-| `WEBSITE_NODE_DEFAULT_VERSION` | `~20` |
-| `SCM_DO_BUILD_DURING_DEPLOYMENT` | `true`（Oryx ビルド有効化） |
+| Key | Value | 必須 |
+|---|---|---|
+| `DATABASE_URL` | Azure SQL の接続文字列（上記形式） | ✅ |
+| `SESSION_SECRET` | **32 文字以上**のランダム文字列 | ✅ |
+| `ADMIN_LOGIN_ID` / `ADMIN_PASSWORD` / `ADMIN_NAME` | seed 実行時に必要 | seed のみ |
+| `SCM_DO_BUILD_DURING_DEPLOYMENT` | `true`（Oryx で `npm install` を走らせる場合） | 任意 |
 
-### 3. デプロイ
+> Linux App Service では `WEBSITE_NODE_DEFAULT_VERSION` は不要（Windows 用設定）。Node バージョンは `linuxFxVersion` で決まる。
 
-GitHub Actions / `az webapp deploy` / VS Code 拡張など任意の方法で。Oryx が自動で `npm install`（postinstall で `prisma generate` 実行）→ `npm run build` を行います。
+### 3. デプロイ（GitHub Actions）
+
+`main` への push で `.github/workflows/deploy.yml` が起動します。
+
+1. `build` ジョブ: lint / tsc / vitest / `next build`（`output: 'standalone'`）→ 成果物を artifact 化
+2. `deploy` ジョブ: `environment: production` で承認待ちに停止 → Required reviewer の承認後に App Service へ反映
+
+PR / 非 main push では `.github/workflows/ci.yml` の `verify` ジョブが lint / tsc / vitest を回します。Branch protection で `verify` を必須にしているため、緑にならない PR はマージできません。
 
 ### 4. 初回のみ DB マイグレーションと初期管理者登録
 
-ローカルから `DATABASE_URL` を本番の値に変えて実行するか、App Service の Kudu コンソールから以下を実行：
+ローカルから `DATABASE_URL` を本番の値に変えて実行するか、App Service の Kudu コンソール（SCM Basic Auth 必要）から以下を実行：
 
 ```bash
-npm run db:deploy
-npm run db:seed
+npm run db:deploy    # prisma migrate deploy
+npm run db:seed      # 初期管理者の upsert
 ```
 
 ### 5. 起動
 
-App Service の Startup Command は `npm start` でOK。
+Startup Command は **`node server.js`** を指定します（`output: 'standalone'` のエントリ）。`npm start` を指定すると `next start` が呼ばれ、standalone バンドルでは起動できません。
+
+> **Always On は OFF で運用中**（コスト最適化）。アイドル後の初回アクセスはコールドスタートで数秒〜数十秒かかります。常時応答が必要なら `az webapp config set -g rg-claude -n sgclaudedemo --always-on true` で有効化できます（料金影響あり）。
 
 ## ディレクトリ構成
 
@@ -162,8 +173,10 @@ App Service の Startup Command は `npm start` でOK。
 prisma/
   schema.prisma          Prisma スキーマ
   seed.ts                初期管理者登録スクリプト
-proxy.ts                 ルート保護（Next.js 16 の middleware 後継）
 prisma.config.ts         Prisma 設定（datasource.url）
+proxy.ts                 ルート保護（Next.js 16 の middleware 後継）
+next.config.ts           output: 'standalone' + Prisma/mssql 同梱設定
+vitest.config.ts         Vitest 設定（jsdom + パスエイリアス）
 src/
   app/
     layout.tsx
@@ -186,9 +199,19 @@ src/
   components/
     header.tsx
   lib/
-    db.ts                PrismaClient（MSSQL adapter）
+    db.ts                PrismaClient（MSSQL adapter, Proxy 遅延初期化）
+    env.ts               環境変数の起動時検証（zod / fail-fast）
     session.ts           iron-session ヘルパー
+    schemas.ts           zod スキーマ集約（Server Action から分離）
     csv.ts               CSV パース/生成
+    csv.test.ts          CSV ロジックの単体テスト
+    schemas.test.ts      zod スキーマの単体テスト
+docs/
+  design.md              設計書
+  testing.md             テスト・CI 運用ガイド
+.github/workflows/
+  ci.yml                 PR/非 main push 時の verify ジョブ
+  deploy.yml             main push 時のビルド + 承認 + デプロイ
 ```
 
 ## Prisma MSSQL Adapter の注意点
@@ -202,3 +225,4 @@ src/
 - ミドルウェアは `proxy.ts` にリネーム（Node.js ランタイム限定）
 - `cookies()`, `headers()`, `params`, `searchParams` は全て `await` 必須
 - Turbopack がデフォルト。`next build` も Turbopack で実行される
+- `src/lib/env.ts` が起動時に `process.env` を zod で検証し、不足や `SESSION_SECRET` の 32 文字未満などで `process.exit(1)` する（fail-fast）。`next build` 中（`NEXT_PHASE=phase-production-build`）はダミー値で検証をスキップするため、CI runner に環境変数が無くてもビルドは通る。詳細は [docs/design.md §7.5](docs/design.md)
