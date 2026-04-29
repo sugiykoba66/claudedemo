@@ -22,21 +22,53 @@ const EnvSchema = z.object({
     .default('development'),
 });
 
-// 検証実行。失敗時は標準エラーに詳細を出して終了
-const parsed = EnvSchema.safeParse(process.env);
+// EnvSchema から型を取り出す（z.infer を使うと TypeScript の型として再利用できる）
+type Env = z.infer<typeof EnvSchema>;
 
-if (!parsed.success) {
-  // z.flattenError でフィールドごとのエラーを取り出す
-  const fieldErrors = z.flattenError(parsed.error).fieldErrors;
-  console.error('[env] 環境変数の検証に失敗しました:');
-  for (const [key, messages] of Object.entries(fieldErrors)) {
-    if (messages && messages.length > 0) {
-      console.error(`  - ${key}: ${messages.join(', ')}`);
+// Next.js のビルド時（next build 中）は process.env.NEXT_PHASE が
+// 'phase-production-build' になる。このフェーズではページデータ収集のために
+// サーバモジュールが評価されるが、実際のリクエストは処理しない。
+// CI runner には DATABASE_URL / SESSION_SECRET が無いので、
+// ここで厳密チェックすると CI のビルドが必ず落ちてしまう。
+// したがってビルド時はチェックをスキップしてダミー値を入れる。
+//
+// 実行時（standalone 起動時 = node server.js）は NEXT_PHASE が未設定になるため、
+// 本番ランタイムの fail-fast はそのまま機能する。
+const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build';
+
+// ビルド時専用のダミー値。EnvSchema の制約（min(1) や min(32)）を満たす必要がある。
+// 実際のリクエスト処理では使われないので接続できなくても問題ない。
+const BUILD_PLACEHOLDER: Env = {
+  DATABASE_URL: 'sqlserver://build-placeholder',
+  // ちょうど 32 文字以上のダミー文字列
+  SESSION_SECRET: 'build-placeholder-build-placeholder-build',
+  NODE_ENV: 'production',
+};
+
+// ビルド時以外は通常通り process.env を検証する
+let resolvedEnv: Env;
+
+if (isBuildPhase) {
+  resolvedEnv = BUILD_PLACEHOLDER;
+} else {
+  // 検証実行。失敗時は標準エラーに詳細を出して終了
+  const parsed = EnvSchema.safeParse(process.env);
+
+  if (!parsed.success) {
+    // z.flattenError でフィールドごとのエラーを取り出す
+    const fieldErrors = z.flattenError(parsed.error).fieldErrors;
+    console.error('[env] 環境変数の検証に失敗しました:');
+    for (const [key, messages] of Object.entries(fieldErrors)) {
+      if (messages && messages.length > 0) {
+        console.error(`  - ${key}: ${messages.join(', ')}`);
+      }
     }
+    // dev でも本番でも一律終了。.env / App Service の設定を見直すこと
+    process.exit(1);
   }
-  // dev でも本番でも一律終了。.env / App Service の設定を見直すこと
-  process.exit(1);
+
+  resolvedEnv = parsed.data;
 }
 
-// 検証済みの環境変数オブジェクト。as const で値が読み取り専用であることを示す
-export const env = parsed.data;
+// 検証済みの環境変数オブジェクト
+export const env = resolvedEnv;
